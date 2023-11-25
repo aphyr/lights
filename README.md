@@ -28,7 +28,7 @@ devices on the network.
 $ sudo nmap -sP 10.0.0.10/24 | grep -B 2 Philips
 Nmap scan report for 10.0.0.20
 Host is up (0.013s latency).
-MAC Address: EC:B5:FA:92:EA:DA (Philips Lighting BV)
+MAC Address: EC:B5:FA:XX:XX:XX (Philips Lighting BV)
 ```
 
 If your address is 10.0.0.20, you can run...

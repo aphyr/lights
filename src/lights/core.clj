@@ -125,11 +125,11 @@
   "Generate a random color palette."
   []
   (let [angle   (condp < (rand)
-                  2/3  1/3
-                  1/2  1/2
-                  1/3  1/4
-                  1/6  1/5
-                  1/6)
+                  3/4   0
+                  1/2   1/2
+                  1/4   1/3
+                  1/16  1/4
+                        1/5)
         angle   (* angle (if (< (rand) 1/2) -1 1))
         h       (rand) ; primary hue
         dh      1/16   ; noise in hue space

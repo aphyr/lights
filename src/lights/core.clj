@@ -64,6 +64,8 @@
   "Gets lights config."
   [config]
   (->> (lights/lights config)
+       ; Strip out bulbs that don't do color
+       (filter (comp :xy :state second))
        ; Tack on IDs.
        (map (fn [[id light]]
               [id (assoc light :id id)]))
@@ -155,6 +157,9 @@
   [config color' light]
   (let [; Current color
         state (:state light)
+        _     (when-not (:xy state)
+                (prn :no-xy)
+                (pprint light))
         color (c/hue (:xy state) (:bri state))
         hue   (c/h color)
         ; New color, with a bit of noise

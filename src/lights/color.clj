@@ -326,4 +326,7 @@
 (defn hsv [h s v] (HSV. (mod h 1) s v))
 (defn rgb [r g b] (RGB. r g b))
 (defn xyz [x y z] (XYZ. x y z))
-(defn hue [xy bri] (Hue. xy bri))
+(defn hue [xy bri]
+  (assert xy (pr-str xy))
+  (assert bri (pr-str bri))
+  (Hue. xy bri))

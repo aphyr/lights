@@ -1,4 +1,5 @@
 (ns lights.core
+  ; TODO: https://github.com/ZeroOne3010/yetanotherhueapi
   (:require [lights.color :as c]
             [me.raynes.clhue [config :as conf]
              [lights :as lights]]

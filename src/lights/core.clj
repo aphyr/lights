@@ -128,16 +128,17 @@
   "Generate a random color palette."
   []
   (let [angle   (condp < (rand)
-                  3/4   0
-                  1/2   1/2
-                  1/4   1/3
-                  1/16  1/4
-                        1/5)
+                  1/2   0 ; Over-represented because it's so rare we get a
+                          ; chance to come here aesthetically
+                  1/4   1/2
+                  1/16  1/3
+                        1/4)
         angle   (* angle (if (< (rand) 1/2) -1 1))
         h       (rand) ; primary hue
-        dh      1/16   ; noise in hue space
+        dh      1/24   ; noise in hue space
         ds      1/4    ; noise in saturation space
         dv      2/3]   ; noise in value space
+    (prn :--- angle)
     (->> (range 12)
          (map (fn [i]
                 (c/hsv (- h (* angle i) (rand dh))
@@ -179,8 +180,8 @@
         ;_ (prn :in-gamut? in-gamut?)
         ; How far are we going in hue space?
         dh (Math/abs (- (c/h color) (c/h color')))
-        near-color? (or (< dh 1/4)   ; no wrap
-                        (< 3/4 dh))] ; wrap
+        near-color? (or (< dh 1/3)   ; no wrap
+                        (< 2/3 dh))] ; wrap
     ; (prn :dh dh)
     (when (and in-gamut? near-color?)
       {(:id light)

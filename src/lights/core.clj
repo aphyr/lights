@@ -1,6 +1,6 @@
 (ns lights.core
-  ; TODO: https://github.com/ZeroOne3010/yetanotherhueapi
-  (:require [lights.color :as c]
+  (:require [lights [color :as c]
+                    [hue :as h]]
             [me.raynes.clhue [config :as conf]
              [lights :as lights]]
             [clj-http.client :as http]
@@ -8,7 +8,7 @@
                      [pprint :refer [pprint]]]
             [clojure.java.io :as io]
             [clojure.tools.cli :as cli]
-            [hickory [core :as h]
+            [hickory [core :as hickory]
              [select :as hs]]
             [cheshire.core :as json]
             [clojure.core.reducers :as r])
@@ -26,13 +26,15 @@
       (edn/read r))))
 
 (defn config
-  "Takes CLI options. Loads config from file. Validates config map, and returns
-  it."
-  [opts]
-  (let [c (merge (load-config) opts)]
-    (assert (string? (:user c)))
-    (assert (string? (:address c)))
-    c))
+  "Takes CLI options. Loads config from file, merging in options map. Validates
+  config map, and returns it."
+  ([]
+   (config {}))
+  ([opts]
+   (let [c (merge (load-config) opts)]
+     (assert (string? (:user c)))
+     (assert (string? (:address c)))
+     c)))
 
 (defn save-config!
   "Saves config map to file."
@@ -57,65 +59,26 @@
   [x]
   (min 255 (max 0 x)))
 
-(defn auth!
-  [opts]
-  (conf/auth-user opts "clojure lights"))
-
-(defn lights
-  "Gets lights config."
-  [config]
-  (->> (lights/lights config)
-       ; Strip out bulbs that don't do color
-       (filter (comp :xy :state second))
-       ; Tack on IDs.
-       (map (fn [[id light]]
-              [id (assoc light :id id)]))
-       (into (sorted-map))))
-
 (defn lights->clusters
-  "Groups lights together if they share a common prefix with only letters or
-  numbers distinguishing them. Takes a lights map, returns a vector of
-  vectors of lights in the same cluster."
+  "Groups a sequence of lights together if they share a common prefix with only
+  letters or numbers distinguishing them. Takes a lights map, returns a vector
+  of vectors of lights in the same cluster."
   [lights]
-  (->> (vals lights)
+  (->> lights
        (group-by (fn [light]
-                   (let [name (:name light)]
-                     (if-let [match (re-find #"^(.+?)\s+(\d+|A-Z)$" name)]
+                   (let [name (:name (:metadata light))]
+                     (if-let [match (re-find #"^(.+?)\s+(\d+|[A-Z])$" name)]
                        (nth match 1)
                        name))))
        vals))
-
-(defn lights!
-  "Applies settings to multiple lights, given a map of light IDs to a map of
-  state names to values."
-  [config settings]
-  ;(pprint settings)
-  (doall
-    (map (fn [[id state]]
-            (lights/light config (name id) state))
-          settings)))
-
-(defn scale!
-  [config factor]
-  (->> (lights/lights config)
-       (map-vals #(->> % :state :bri (+ factor) clip (hash-map :bri)))
-       (lights! config)))
-
-(defn higher!
-  [config]
-  (scale! config 50))
-
-(defn lower!
-  [config]
-  (scale! -50))
 
 (defn rand-web-palette
   "Get a color palette from the web"
   []
   (->> (http/get "http://www.colourlovers.com/api/palettes/random")
        :body
-       h/parse
-       h/as-hickory
+       hickory/parse
+       hickory/as-hickory
        (hs/select (hs/child (hs/tag :palettes)
                             (hs/tag :palette)
                             (hs/tag :colors)
@@ -159,16 +122,14 @@
   [config color' light]
   (let [; Current color
         state (:state light)
-        _     (when-not (:xy state)
-                (prn :no-xy)
-                (pprint light))
-        color (c/hue (:xy state) (:bri state))
-        hue   (c/h color)
+        color (c/hue (:xy (:color light))
+                     (:brightness (:dimming light)))
         ; New color, with a bit of noise
         color' (-> color'
                    (c/perturb-h 1/12)
                    (c/perturb-s 1/8)
-                   (c/perturb-l 1/6))
+                   (c/perturb-v 1/6)
+                   c/->hue)
         ; Is the new color in the light's gamut?
         ; TODO: I don't think gamut checking is actually working at all
         in-gamut? true
@@ -184,16 +145,17 @@
                         (< 2/3 dh))] ; wrap
     ; (prn :dh dh)
     (when (and in-gamut? near-color?)
+      ; Close enough
       {(:id light)
-       ; Close enough
-       (assoc (c/->hue-hsb color' (:modelid light))
-              :transitiontime
-              (-> (:interval config)
-                  ; deciseconds
-                  (* 10)
-                  ; Hold for a bit
-                  (* 3/5)
-                  long))})))
+       {:dynamics {:duration (-> (:interval config)
+                                 ; milliseconds
+                                 (* 1000)
+                                 ; Hold for a bit
+                                 (* 3/5)
+                                 long)}
+        :dimming {:brightness (:bri color')}
+        :color {:xy {:x (:x color')
+                     :y (:y color')}}}})))
 
 (defn apply-palette-to-cluster
   "Applies a palette to a specific cluster, yielding a settings map for
@@ -214,12 +176,12 @@
   through low-saturation colors by ensuring their hues are close-ish. Returns
   nil if it can't preserve aesthetic."
   [config palette]
-  (let [clusters (-> config lights lights->clusters)
+  (let [clusters (-> config h/lights lights->clusters)
         settings (map (partial apply-palette-to-cluster config palette) clusters)]
     (if (some nil? settings)
       (do (println "Skipping palette; can't transform aesthetically")
           nil)
-      (lights! config (reduce merge {} settings)))))
+      (h/lights! config (reduce merge {} settings)))))
 
 (defn party!
   "Takes a config map and continuously adjusts the lights to random palettes
@@ -263,16 +225,10 @@
 
      (case cmd
        "auth"
-       (do (println "Press the button on your Hue bridge, then hit enter within 30 seconds.")
-           (read-line)
-           (let [auth (auth! options)]
-             (when-not (:success auth)
-               (pprint auth)
-               (System/exit 2))
-             (save-config!
-               {:user    (:username (:success auth))
-                :address (:address options)})
-             (println "Auth complete. You may now party.")))
+       (do (save-config!
+             {:user    (h/create-api-key! (:address options))
+              :address (:address options)})
+           (println "Auth complete. You may now party."))
 
        "party"
        (let [config (config options)]

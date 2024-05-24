@@ -8,7 +8,6 @@
                    :releases false}]]
   :dependencies [[org.clojure/clojure "1.11.1"]
                  [clj-http "3.12.3"]
-                 [clj-wallhack "1.0.1"]
                  [hickory "0.7.1"]
                  [cheshire "5.12.0"]
                  [org.clojure/tools.cli "1.0.219"]

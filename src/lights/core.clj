@@ -106,11 +106,42 @@
                        (- 1 (rand ds))
                        (- 1 (rand dv))))))))
 
-(defn light->gamut
-  "Returns a gamut map from a light's reported gamut in the API."
+(defn perturb-color
+  "Takes a color and returns a nearby Hue color with a bit of noise."
+  [color]
+  (-> color
+      (c/perturb-h 1/12)
+      (c/perturb-s 1/8)
+      (c/perturb-v 1/6)))
+
+(defn near-hue?
+  "Are two colors nearby each other in hue space, or would transitioning
+  between them bring the color uncomfortably close to white?"
+  [c1 c2]
+  (let [; How far are we going in hue space?
+        dh (Math/abs (- (c/h c1) (c/h c2)))]
+    (or (< dh 1/3)    ; no wrap
+        (< 2/3 dh)))) ; wrap
+
+(defn light-color
+  "Takes a light map from the Hue API, returns its color."
   [light]
-  (zipmap [:red :green :blue]
-          (:colorgamut (:control (:capabilities light)))))
+  (c/hue (:xy (:color light))
+         (:brightness (:dimming light))))
+
+(defn color-update
+  "Takes a config map, a light map, and a color. Produces a color update map
+  with :dimming and :color transitioning to that color."
+  [config light color']
+  (let [color' (c/->hue color')]
+    {(:id light)
+     {:dynamics {:duration (-> (:interval config)
+                               (* 1000) ; millis
+                               (* 3/5)  ; spend some time stable
+                               long)}
+      :dimming {:brightness (:bri color')}
+      :color {:xy {:x (:x color')
+                   :y (:y color')}}}}))
 
 (defn apply-color-to-light
   "Applies a color to a particular light, yielding a settings map for lights!
@@ -118,42 +149,10 @@
   nil if it doesn't think it can execute this transition while preserving
   ~aesthetic~."
   [config color' light]
-  (let [; Current color
-        state (:state light)
-        color (c/hue (:xy (:color light))
-                     (:brightness (:dimming light)))
-        ; New color, with a bit of noise
-        color' (-> color'
-                   (c/perturb-h 1/12)
-                   (c/perturb-s 1/8)
-                   (c/perturb-v 1/6)
-                   c/->hue)
-        ; Is the new color in the light's gamut?
-        ; TODO: I don't think gamut checking is actually working at all
-        in-gamut? true
-        ;_ (pprint light)
-        ;gamut (light->gamut light)
-        ;_ (prn :gamut gamut)
-        ;in-gamut? (c/in-lamp-reach? (:xy (c/->hue color' (:modelid light)))
-        ;                            gamut)
-        ;_ (prn :in-gamut? in-gamut?)
-        ; How far are we going in hue space?
-        dh (Math/abs (- (c/h color) (c/h color')))
-        near-color? (or (< dh 1/3)   ; no wrap
-                        (< 2/3 dh))] ; wrap
-    ; (prn :dh dh)
-    (when (and in-gamut? near-color?)
-      ; Close enough
-      {(:id light)
-       {:dynamics {:duration (-> (:interval config)
-                                 ; milliseconds
-                                 (* 1000)
-                                 ; Hold for a bit
-                                 (* 3/5)
-                                 long)}
-        :dimming {:brightness (:bri color')}
-        :color {:xy {:x (:x color')
-                     :y (:y color')}}}})))
+  (let [color  (light-color light)
+        color' (perturb-color color')]
+    (when (near-hue? color color')
+      (color-update config light color'))))
 
 (defn apply-palette-to-cluster
   "Applies a palette to a specific cluster, yielding a settings map for

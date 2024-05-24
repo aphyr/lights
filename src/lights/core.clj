@@ -1,8 +1,6 @@
 (ns lights.core
   (:require [lights [color :as c]
                     [hue :as h]]
-            [me.raynes.clhue [config :as conf]
-             [lights :as lights]]
             [clj-http.client :as http]
             [clojure [edn :as edn]
                      [pprint :refer [pprint]]]

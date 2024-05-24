@@ -1,6 +1,6 @@
 (ns lights.color
-  "Colorspace conversions"
-  (:require [com.evocomputing.colors :as c]))
+  "Colorspace conversions. God this was such a pain, but I couldn't find a JVM
+  library for it.")
 
 ; See: http://www.brucelindbloom.com/index.html?Math.html
 ; See also: http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html

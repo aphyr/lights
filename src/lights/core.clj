@@ -322,9 +322,11 @@
 
      (case cmd
        "auth"
-       (do (save-config!
-             {:user    (h/create-api-key! (:address options))
-              :address (:address options)})
+       (do (let [bridge (or (:address options)
+                            (h/discover))]
+             (save-config!
+               {:user    (h/create-api-key! bridge)
+                :address bridge}))
            (println "Auth complete. You may now party."))
 
        "party"

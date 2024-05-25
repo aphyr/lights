@@ -20,6 +20,7 @@
 (defn discover
   "Discovers a Hue bridge, returning its IP or nil."
   []
+  (println "Discovering a Hue bridge...")
   (when-let [bridge (-> (HueBridgeDiscoveryService.)
                         (.discoverBridges
                           (reify Consumer (accept [_ _]))
@@ -34,6 +35,8 @@
   ([bridge-ip]
    (create-api-key! bridge-ip "clojure lights"))
   ([bridge-ip app-name]
+   (assert (string? bridge-ip))
+   (println "Setting up app on Hue bridge" bridge-ip)
    (let [fut (.. (HueBridgeConnectionBuilder. bridge-ip)
                  (initializeApiConnection app-name))]
      (println "Press the button on your bridge to continue...")

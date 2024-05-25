@@ -467,6 +467,10 @@
 (defn xyy [x y Y] (XYY. x y Y))
 
 (defn hue
+  "Constructs a hue color. Takes a map with :x and :y, or that map plus a
+  brightness in 0-100, or an x y brightness triple."
+  ([xy]
+   (hue xy 100))
   ([xy bri]
    (cond (vector? xy)
          (let [[x y] xy]

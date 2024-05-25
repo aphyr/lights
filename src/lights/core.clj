@@ -88,30 +88,41 @@
 (defn rand-palette
   "Generate a random color palette."
   []
-  (let [angle   (condp < (rand)
-                  1/2   0 ; Over-represented because it's so rare we get a
-                          ; chance to come here aesthetically
-                  1/4   1/2
-                  1/16  1/3
-                        1/4)
-        angle   (* angle (if (< (rand) 1/2) -1 1))
+  (let [; Are we broadly a monochrome, opposing, tertiary, or quaternary scheme?
+        anchor-n (condp < (rand)
+                   3/4  1
+                   1/2  2
+                   1/4  3
+                        4)
         h       (rand) ; primary hue
         dh      1/24   ; noise in hue space
-        ds      1/4    ; noise in saturation space
-        dv      2/3]   ; noise in value space
-    (prn :--- angle)
-    (->> (range 12)
-         (map (fn [i]
-                (c/hsv (- h (* angle i) (rand dh))
-                       (- 1 (rand ds))
-                       (- 1 (rand dv))))))))
+        ds      1/12   ; noise in saturation space
+        dv      2/3    ; noise in value space
+        ; Generate anchor hues widely separated around the color wheel
+        anchors (map (fn [i]
+                       (+ h (* i (/ anchor-n))))
+                     (range anchor-n))
+        ;_ (println "Raw anchors:" anchors)
+        ; Sometimes we only want, say, two of those 4 anchors.
+        anchor-n (inc (rand-int anchor-n))
+        anchors  (take anchor-n (shuffle anchors))]
+    ;(println "Restricted anchors:" anchors)
+    ; Now expand those anchor hues into a larger palette
+    (mapcat (fn [anchor]
+              (map (fn [i]
+                     ; Add some noise to the anchor, producing a color
+                     (c/hsv (- anchor (rand dh))
+                            (- 1 (rand ds))
+                            (- 1 (rand dv))))
+                   (range (inc (rand-int 3))))) ; 1-4 colors per anchor
+           anchors)))
 
 (defn perturb-color
   "Takes a color and returns a nearby Hue color with a bit of noise."
   [color]
   (-> color
       (c/perturb-h 1/12)
-      (c/perturb-s 1/8)
+      (c/perturb-s 1/12)
       (c/perturb-v 1/6)))
 
 (defn near-hue?
@@ -129,16 +140,22 @@
   (c/hue (:xy (:color light))
          (:brightness (:dimming light))))
 
+(defn dynamics-update
+  "Yields a partial map for updating a light, given a config, with the
+  transition time :dynamics field."
+  [config]
+  {:duration (-> (:interval config)
+                 (* 1000) ; millis
+                 (* 3/5)  ; spend some time stable
+                 long)})
+
 (defn color-update
   "Takes a config map, a light map, and a color. Produces a color update map
   with :dimming and :color transitioning to that color."
   [config light color']
   (let [color' (c/->hue color')]
     {(:id light)
-     {:dynamics {:duration (-> (:interval config)
-                               (* 1000) ; millis
-                               (* 3/5)  ; spend some time stable
-                               long)}
+     {:dynamics (dynamics-update config)
       :dimming {:brightness (:bri color')}
       :color {:xy {:x (:x color')
                    :y (:y color')}}}}))
@@ -149,10 +166,89 @@
   nil if it doesn't think it can execute this transition while preserving
   ~aesthetic~."
   [config color' light]
+  ;(pprint light)
   (let [color  (light-color light)
         color' (perturb-color color')]
     (when (near-hue? color color')
       (color-update config light color'))))
+
+(defn gradient-colors
+  "Takes a gradient light, returns a vector of colors."
+  [light]
+  (let [bri (:brightness (:dimming light))]
+    (mapv (fn [point]
+            (c/hue (:xy (:color point)) bri))
+          (:points (:gradient light)))))
+
+(defn apply-gradient-to-light-
+  "Picks a few points from a gradient and constructs a settings map for lights!
+  which applies palette colors to a light as a gradient. Returns nil if we fail
+  to generate a new gradient, which will happen often."
+  [config palette light]
+  (let [colors   (gradient-colors light)
+        palette (shuffle palette)
+        ; Get the endpoints. If the light is a single color this will be empty.
+        p1 (or (first colors) (first palette))
+        p2 (or (peek colors)  (second palette))
+        ; Find new endpoint colors
+        p1 (first (filter (partial near-hue? p1) (shuffle palette)))
+        p2 (first (filter (partial near-hue? p2) (shuffle palette)))]
+    (when (and p1 p2)
+      (let [; Pin to max value
+            p1 (c/assoc-v p1 1)
+            p2 (c/assoc-v p2 1)
+            ; Build a five-point gradient between these two, rotating through
+            ; hue space. Start by computing a hue angle...
+            h1 (c/h p1)
+            h2 (c/h p2)
+            dh (- h2 h1)
+            ; We can go either direction in hue space
+            dh (if (< (rand) 1/2)
+                 dh
+                 (- 1 dh))
+            ; Number of points
+            n 5
+            dh (/ dh n)
+            ; Interpolate linearly through saturation space
+            ds (/ (- (c/s p2) (c/s p1)) n)
+            ; Expand to 5 color points
+            colors' (mapv (fn [i]
+                            (-> (c/hsv (+ h1       (* i dh))
+                                       (+ (c/s p1) (* i ds))
+                                       1) ; Always max value
+                                c/->hue))
+                          (range n))
+            points' (mapv (fn [color]
+                           {:color {:xy (select-keys color [:x :y])}})
+                         colors')]
+        ; Double-check that our newly generated midpoint won't pull us too far
+        ; from the current midpoint.
+        (if (or (< (count colors) 3)
+                  (near-hue? (nth colors 2) (nth colors' 2)))
+          {(:id light)
+           {:dynamics (dynamics-update config)
+            ; Strips are a lot dimmer than normal lights and should be maxed out
+            :dimming {:brightness 100}
+            :gradient {:points points'}}}
+          ;(prn "New gradient midpoint too far from current midpoint")
+          )))))
+
+(defn apply-gradient-to-light
+  "Like apply-gradient-to-light-, but retries several times in hopes of getting
+  a working transition."
+  [config palette light]
+  (loop [tries 10]
+    (when (pos? tries)
+      (or (apply-gradient-to-light- config palette light)
+          (recur (dec tries))))))
+
+(defn apply-palette-to-light
+  "Applies a palette, possibly with a preferred color, to a light, returning an
+  update map or nil."
+  [config palette color light]
+  (if (h/gradient? light)
+    (apply-gradient-to-light config palette light)
+    (apply-color-to-light config color light)))
 
 (defn apply-palette-to-cluster
   "Applies a palette to a specific cluster, yielding a settings map for
@@ -161,7 +257,8 @@
   (loop [colors (shuffle palette)]
     (when (seq colors)
       (let [[color & colors] colors
-            settings (map (partial apply-color-to-light config color) cluster)]
+            settings (map (partial apply-palette-to-light config palette color)
+                          cluster)]
         (if (some nil? settings)
           ; Can't work with this color
           (recur colors)
@@ -176,7 +273,7 @@
   (let [clusters (-> config h/lights lights->clusters)
         settings (map (partial apply-palette-to-cluster config palette) clusters)]
     (if (some nil? settings)
-      (do (println "Skipping palette; can't transform aesthetically")
+      (do ;(println "Skipping palette; can't transform aesthetically")
           nil)
       (h/lights! config (reduce merge {} settings)))))
 
@@ -185,9 +282,12 @@
   every interval seconds."
   [config]
   (let [palette' (rand-palette)]
-    (when (apply-palette! config palette')
-      ; Applied
-      (Thread/sleep (* 1000 (:interval config))))
+    (try (when (apply-palette! config palette')
+           ; Applied
+           (Thread/sleep (* 1000 (:interval config))))
+         (catch java.io.EOFException e
+           (.printStackTrace e)
+           (Thread/sleep 1000)))
     (recur config)))
 
 (def cli-opts

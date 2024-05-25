@@ -85,6 +85,59 @@
        (map first)
        (map c/hex)))
 
+; Borrowed from Jepsen.util
+(defn rand-exp
+  "Generates a exponentially distributed random value with rate parameter
+  lambda."
+  [lambda]
+  (* (Math/log (- 1 (rand))) (- lambda)))
+
+(defn rand-distribution
+  "Generates a random value with a distribution (default `:uniform`) of:
+   ```clj
+   ; Uniform distribution from min (inclusive, default 0) to max (exclusive, default Long/MAX_VALUE).
+   {:distribution :uniform, :min 0, :max 1024}
+
+   ; Geometric distribution with mean 1/p.
+   {:distribution :geometric, :p 1e-3}
+
+   ; Select a value from a sequence with equal probability.
+   {:distribution :one-of, :values [-1, 4097, 1e+6]}
+
+   ; Select a value based on weights. :weights are {value weight ...}
+   {:distribution :weighted :weights {1e-3 1 1e-4 3 1e-5 1}}
+   ```"
+  ([] (rand-distribution {}))
+  ([distribution-map]
+   (let [{:keys [distribution min max p values weights]} distribution-map
+         distribution (or distribution :uniform)
+         min (or min 0)
+         max (or max Long/MAX_VALUE)
+         _   (assert (case distribution
+                       :uniform   (< min max)
+                       :geometric (number? p)
+                       :one-of    (seq values)
+                       :weighted  (and (map? weights)
+                                       (->> weights
+                                            vals
+                                            (every? number?)))
+                       false)
+                     (str "Invalid distribution-map: " distribution-map))]
+     (case distribution
+       :uniform   (long (Math/floor (+ min (* (rand) (- max min)))))
+       :geometric (long (Math/ceil  (/ (Math/log (rand))
+                                       (Math/log (- 1.0 p)))))
+       :one-of    (rand-nth values)
+       :weighted  (let [values  (keys weights)
+                        weights (reductions + (vals weights))
+                        total   (last weights)
+                        choices (map vector values weights)]
+                    (let [choice (rand-int total)]
+                      (loop [[[v w] & more] choices]
+                        (if (< choice w)
+                          v
+                          (recur more)))))))))
+
 (defn rand-palette
   "Generate a random color palette."
   []
@@ -103,10 +156,16 @@
                        (+ h (* i (/ anchor-n))))
                      (range anchor-n))
         ;_ (println "Raw anchors:" anchors)
-        ; Sometimes we only want, say, two of those 4 anchors.
-        anchor-n (inc (rand-int anchor-n))
+        ; Often we only want, say, two of those 4 anchors. Note that we
+        ; deliberately over-represent more monochrome schemes because they're
+        ; more likely to be rejected during transition. To tune this
+        ; distribution, try (->> (repeatedly #(l/rand-exp 1)) (map (fn [x]
+        ; (long (min x 4)))) (take 10000) frequencies (into (sorted-map)))
+        anchor-n (-> (rand-distribution {:distribution :geometric
+                                         :p 1/2})
+                     (min 4))
         anchors  (take anchor-n (shuffle anchors))]
-    ;(println "Restricted anchors:" anchors)
+    (println "Restricted anchors count" (count anchors))
     ; Now expand those anchor hues into a larger palette
     (mapcat (fn [anchor]
               (map (fn [i]
@@ -114,14 +173,17 @@
                      (c/hsv (- anchor (rand dh))
                             (- 1 (rand ds))
                             (- 1 (rand dv))))
-                   (range (inc (rand-int 3))))) ; 1-4 colors per anchor
+                   ; A few colors per anchor. Mostly one, but sometimes up to
+                   ; 8, which creates strong bias with sparing highlights.
+                   (range (rand-distribution {:distribution :geometric
+                                              :p 2/3}))))
            anchors)))
 
 (defn perturb-color
   "Takes a color and returns a nearby Hue color with a bit of noise."
   [color]
   (-> color
-      (c/perturb-h 1/12)
+      (c/perturb-h 1/16)
       (c/perturb-s 1/12)
       (c/perturb-v 1/6)))
 
@@ -194,18 +256,22 @@
         p1 (first (filter (partial near-hue? p1) (shuffle palette)))
         p2 (first (filter (partial near-hue? p2) (shuffle palette)))]
     (when (and p1 p2)
-      (let [; Pin to max value
-            p1 (c/assoc-v p1 1)
-            p2 (c/assoc-v p2 1)
+      (let [; Perturb and pin to max values
+            ; Pin to max value
+            p1 (-> p1 perturb-color (c/assoc-v 1))
+            p2 (-> p2 perturb-color (c/assoc-v 1))
             ; Build a five-point gradient between these two, rotating through
             ; hue space. Start by computing a hue angle...
             h1 (c/h p1)
             h2 (c/h p2)
             dh (- h2 h1)
-            ; We can go either direction in hue space
-            dh (if (< (rand) 1/2)
-                 dh
-                 (- 1 dh))
+            ; We can go either direction in hue space, but prefer a smaller
+            ; angle more often--it stops us from getting locked into rainbow
+            ; schemes and lets us do more monochromes
+            [dh1 dh2] (sort-by abs [dh (- 1 dh)])
+            dh (if (< (rand) 4/5)
+                 dh1
+                 dh2)
             ; Number of points
             n 5
             dh (/ dh n)
@@ -274,8 +340,13 @@
         settings (map (partial apply-palette-to-cluster config palette) clusters)]
     (if (some nil? settings)
       (do ;(println "Skipping palette; can't transform aesthetically")
+          (print ".")
+          (flush)
           nil)
-      (h/lights! config (reduce merge {} settings)))))
+      (do (h/lights! config (reduce merge {} settings))
+          (print "O")
+          (flush)
+          true))))
 
 (defn party!
   "Takes a config map and continuously adjusts the lights to random palettes

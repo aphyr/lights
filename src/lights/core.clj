@@ -218,7 +218,10 @@
   (let [color' (c/->hue color')]
     {(:id light)
      {:dynamics (dynamics-update config)
-      :dimming {:brightness (:bri color')}
+      :dimming {:brightness (* (:bri color')
+                               ; Scale by CLI brightness
+                               (:brightness-max config)
+                               1/100)}
       :color {:xy {:x (:x color')
                    :y (:y color')}}}}))
 
@@ -370,6 +373,11 @@
     :validate [pos? "Must be positive"]]
 
    ["-a" "--address ADDRESS" "IP address or DNS name of your Hue bridge."]
+
+   ["-b" "--brightness-max PERCENT" "Maximum brightness (of standard lamps). 0-100."
+    :default 100
+    :parse-fn parse-long
+    :validate [#(<= 0 % 100) "Must be between 0 and 100"]]
 
    ["-u" "--user USERNAME" "Username for your Hue bridge."]
   ])

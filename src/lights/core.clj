@@ -185,7 +185,7 @@
   (-> color
       (c/perturb-h 1/16)
       (c/perturb-s 1/12)
-      (c/perturb-v 1/6)))
+      (c/perturb-v 3/4 #_1/6)))
 
 (defn near-hue?
   "Are two colors nearby each other in hue space, or would transitioning

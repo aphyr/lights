@@ -65,7 +65,7 @@
   (->> lights
        (group-by (fn [light]
                    (let [name (:name (:metadata light))]
-                     (if-let [match (re-find #"^(.+?)\s+(\d+|[A-Z])$" name)]
+                     (if-let [match (re-find #"^(.+?)\s+(\d+|[A-Z]|Left|Right)$" name)]
                        (nth match 1)
                        name))))
        vals))

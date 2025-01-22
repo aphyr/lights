@@ -165,7 +165,7 @@
                                          :p 1/2})
                      (min 4))
         anchors  (take anchor-n (shuffle anchors))]
-    (println "Restricted anchors count" (count anchors))
+    ;(println "Restricted anchors count" (count anchors))
     ; Now expand those anchor hues into a larger palette
     (mapcat (fn [anchor]
               (map (fn [i]
@@ -297,7 +297,7 @@
           {(:id light)
            {:dynamics (dynamics-update config)
             ; Strips are a lot dimmer than normal lights and should be maxed out
-            :dimming {:brightness 100}
+            :dimming {:brightness (rand-int 100)}
             :gradient {:points points'}}}
           ;(prn "New gradient midpoint too far from current midpoint")
           )))))

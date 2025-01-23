@@ -193,8 +193,11 @@
   [c1 c2]
   (let [; How far are we going in hue space?
         dh (Math/abs (- (c/h c1) (c/h c2)))]
-    (or (< dh 1/3)    ; no wrap
-        (< 2/3 dh)))) ; wrap
+    ; (prn :c1 c1 :l (c/l c1) :v (c/v c1) :bri (-> c1 c/->hue :bri))
+    (or (< dh 1/3)        ; no wrap
+        (< 2/3 dh)        ; wrap
+        (< (c/l c1) 1/10)    ; h1 very dim
+        (< (c/l c2) 1/10)))) ; h2 very dim
 
 (defn light-color
   "Takes a light map from the Hue API, returns its color."
@@ -213,11 +216,13 @@
 
 (defn color-update
   "Takes a config map, a light map, and a color. Produces a color update map
-  with :dimming and :color transitioning to that color."
+  with :dimming and :color transitioning to that color. If bri is too low,
+  turns off."
   [config light color']
   (let [color' (c/->hue color')]
     {(:id light)
-     {:dynamics (dynamics-update config)
+     {:on       {:on (< 50 (:bri color'))}
+      :dynamics (dynamics-update config)
       :dimming {:brightness (* (:bri color')
                                ; Scale by CLI brightness
                                (:brightness-max config)
@@ -234,8 +239,12 @@
   ;(pprint light)
   (let [color  (light-color light)
         color' (perturb-color color')]
-    (when (near-hue? color color')
-      (color-update config light color'))))
+    (if (near-hue? color color')
+      ; We can execute an aesthetic transition
+      (color-update config light color')
+      ; Try turning the light off instead.
+      (do ;(prn "color" color "->" color' " too far, turning off")
+          (color-update config light (c/assoc-l color 0))))))
 
 (defn gradient-colors
   "Takes a gradient light, returns a vector of colors."
@@ -336,8 +345,8 @@
 (defn apply-palette!
   "Takes a config map, a palette, and applies it to lights over dt seconds.
   Each cluster gets the same state plus a little noise. Avoids taking lights
-  through low-saturation colors by ensuring their hues are close-ish. Returns
-  nil if it can't preserve aesthetic."
+  through low-saturation colors by ensuring their hues are close-ish, or by
+  turning them off. Returns nil if it can't preserve aesthetic transitions."
   [config palette]
   (let [clusters (-> config h/lights lights->clusters)
         settings (map (partial apply-palette-to-cluster config palette) clusters)]

@@ -346,30 +346,50 @@
     (apply-gradient-to-light config palette light)
     (apply-color-to-light config color light)))
 
+(defn merge-settings
+  "Merges several individual settings maps. If any are nil, returns nil; this
+  represents a failure to satisfy aesthetic requirements."
+  [settings]
+  (when (every? identity settings)
+    (reduce merge {} settings)))
+
 (defn apply-palette-to-cluster
   "Applies a palette to a specific cluster, yielding a settings map for
   lights! Or nil if it can't find a way to do that aesthetically."
   [config palette cluster]
-  (loop [colors (shuffle palette)]
-    (when (seq colors)
-      (let [[color & colors] colors
-            settings
-            (cond
-              ; If we're dealing with a symmetric cluster, give them the same
-              ; color.
-              (symmetric-cluster? cluster)
-              (map (partial apply-palette-to-light config palette color)
-                   cluster)
+  (let [monochrome? (if (large-cluster? cluster)
+                      ; For large clusters, we can do everything as one color,
+                      ; or break it up.
+                      (rand-nth [true false])
+                      ; For small clusters, we always do monochrome.
+                      true)]
+    (if monochrome?
+      ; Try to find a single color that works
+      (loop [colors (shuffle palette)]
+        (when (seq colors)
+          (let [[color & colors] colors
+                settings
+                (merge-settings
+                  (cond
+                    ; If we're dealing with a symmetric cluster, give them the
+                    ; same color.
+                    (symmetric-cluster? cluster)
+                    (map (partial apply-palette-to-light config palette color)
+                         cluster)
 
-              ; Otherwise, introduce some random noise
-              true
-              (map (partial apply-palette-to-light config palette)
-                   (map perturb-color (repeat color))
-                   cluster))]
-        (if (some nil? settings)
-          ; Can't work with this color
-          (recur colors)
-          (reduce merge {} settings))))))
+                    ; Otherwise, introduce some random noise
+                    true
+                    (map (partial apply-palette-to-light config palette)
+                         (map perturb-color (repeat color))
+                         cluster)))]
+            (or settings
+                ; Didn't work, try another color
+                (recur colors)))))
+      ; Break the cluster up into individual lights and try them separately
+      (->> cluster
+           (map vector)
+           (map (partial apply-palette-to-cluster config palette))
+           merge-settings))))
 
 (defn apply-palette!
   "Takes a config map, a palette, and applies it to lights over dt seconds.

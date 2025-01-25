@@ -362,7 +362,14 @@
                       ; or break it up.
                       (rand-nth [true false])
                       ; For small clusters, we always do monochrome.
-                      true)]
+                      true)
+        ; Large clusters can be overwhelmingly bright. We often like to disable
+        ; some (or even all) of the lights.
+        palette (if (large-cluster? cluster)
+                  (let [n (rand-int (inc (count palette)))
+                        [bright dim] (split-at n (shuffle palette))]
+                    (concat bright (map #(c/assoc-v % 0) dim)))
+                  palette)]
     (if monochrome?
       ; Try to find a single color that works
       (loop [colors (shuffle palette)]

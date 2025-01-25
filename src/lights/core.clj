@@ -79,6 +79,11 @@
        (every? (partial re-find #".*(Left|Right)$"))
        boolean))
 
+(defn large-cluster?
+  "For large clusters (3+ lights), we introduce more variation."
+  [lights]
+  (<= 3 (count lights)))
+
 (defn rand-web-palette
   "Get a color palette from the web"
   []
@@ -233,7 +238,9 @@
   [config light color']
   (let [color' (c/->hue color')]
     {(:id light)
-     {:on       {:on (< 50 (:bri color'))}
+     {; An experiment--turning off lights entirely when we ask for very dim
+      ; values. I'm not sure I like this--the transition is rather abrupt.
+      :on       {:on true #_(< 0 (:bri color'))}
       :dynamics (dynamics-update config)
       :dimming {:brightness (* (:bri color')
                                ; Scale by CLI brightness
@@ -351,9 +358,8 @@
               ; If we're dealing with a symmetric cluster, give them the same
               ; color.
               (symmetric-cluster? cluster)
-              (do (prn "Symmetric cluster: " cluster)
-                  (map (partial apply-palette-to-light config palette color)
-                       cluster))
+              (map (partial apply-palette-to-light config palette color)
+                   cluster)
 
               ; Otherwise, introduce some random noise
               true

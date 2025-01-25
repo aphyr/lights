@@ -70,6 +70,15 @@
                        name))))
        vals))
 
+(defn symmetric-cluster?
+  "Is a cluster of lights symmetric? That is, does it have a left and a right
+  side? We like to give these lights similar colors."
+  [lights]
+  (->> lights
+       (map (comp :name :metadata))
+       (every? (partial re-find #".*(Left|Right)$"))
+       boolean))
+
 (defn rand-web-palette
   "Get a color palette from the web"
   []
@@ -180,12 +189,15 @@
            anchors)))
 
 (defn perturb-color
-  "Takes a color and returns a nearby Hue color with a bit of noise."
-  [color]
-  (-> color
-      (c/perturb-h 1/16)
-      (c/perturb-s 1/12)
-      (c/perturb-v 3/4 #_1/6)))
+  "Takes a color and an optional factor, and returns a nearby Hue color with a
+  bit of noise."
+  ([color]
+   (perturb-color color 1))
+  ([color factor]
+   (-> color
+       (c/perturb-h (* 1/16 factor))
+       (c/perturb-s (* 1/12 factor))
+       (c/perturb-v (* 1/6 factor)))))
 
 (defn near-hue?
   "Are two colors nearby each other in hue space, or would transitioning
@@ -237,8 +249,7 @@
   ~aesthetic~."
   [config color' light]
   ;(pprint light)
-  (let [color  (light-color light)
-        color' (perturb-color color')]
+  (let [color (light-color light)]
     (if (near-hue? color color')
       ; We can execute an aesthetic transition
       (color-update config light color')
@@ -335,8 +346,20 @@
   (loop [colors (shuffle palette)]
     (when (seq colors)
       (let [[color & colors] colors
-            settings (map (partial apply-palette-to-light config palette color)
-                          cluster)]
+            settings
+            (cond
+              ; If we're dealing with a symmetric cluster, give them the same
+              ; color.
+              (symmetric-cluster? cluster)
+              (do (prn "Symmetric cluster: " cluster)
+                  (map (partial apply-palette-to-light config palette color)
+                       cluster))
+
+              ; Otherwise, introduce some random noise
+              true
+              (map (partial apply-palette-to-light config palette)
+                   (map perturb-color (repeat color))
+                   cluster))]
         (if (some nil? settings)
           ; Can't work with this color
           (recur colors)

@@ -237,7 +237,7 @@
   turns off."
   [config light color']
   (let [color' (c/->hue color')]
-    (prn "Color:" color')
+    ;(prn "Color:" color')
     {(:id light)
      {; An experiment--turning off lights entirely when we ask for very dim
       ; values. I'm not sure I like this--the transition is rather abrupt.

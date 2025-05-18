@@ -164,7 +164,7 @@
         h       (rand) ; primary hue
         dh      1/24   ; noise in hue space
         ds      1/12   ; noise in saturation space
-        dv      2/3    ; noise in value space
+        dv      1/3    ; noise in value space
         ; Generate anchor hues widely separated around the color wheel
         anchors (map (fn [i]
                        (+ h (* i (/ anchor-n))))
@@ -237,6 +237,7 @@
   turns off."
   [config light color']
   (let [color' (c/->hue color')]
+    (prn "Color:" color')
     {(:id light)
      {; An experiment--turning off lights entirely when we ask for very dim
       ; values. I'm not sure I like this--the transition is rather abrupt.
@@ -262,7 +263,9 @@
       (color-update config light color')
       ; Try turning the light off instead.
       (do ;(prn "color" color "->" color' " too far, turning off")
-          (color-update config light (c/assoc-l color 0))))))
+          ;(color-update config light (c/assoc-l color 0))
+          nil ; Abort
+          ))))
 
 (defn gradient-colors
   "Takes a gradient light, returns a vector of colors."

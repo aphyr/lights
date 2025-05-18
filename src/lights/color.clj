@@ -185,6 +185,9 @@
            (recur (dec i) 1)
            (recur (dec i) (/ bri m))))))))
 
+(extend-type nil
+  ToHSV (->hsv [_] (hsv 0 0 0)))
+
 (defrecord Hex [hex]
   ToRGB (->rgb [_]
           (rgb (double (/ (Long/parseLong (subs hex 0 2) 16) 255))

@@ -464,17 +464,6 @@
    ["-u" "--user USERNAME" "Username for your Hue bridge."]
   ])
 
-(defn for-graalvm!
-  "Does stuff so GraalVM can pick up our dependencies"
-  []
-  ; It'll leave out java.lang.Math???
-  (Math/abs -1)
-  ; Logging setup
-  (start-logging! {:level "info", :console true})
-  (info "Lights (this message here for GraalVM native-image compilation"))
-
-(for-graalvm!)
-
 (defn -main
   "Main entry point"
   ([]
@@ -485,6 +474,7 @@
    (println "Flags:")
    (println (:summary (cli/parse-opts [] cli-opts))))
   ([cmd & args]
+   (start-logging! {:level "info", :console true})
    (let [{:keys [options arguments summary errors]}
          (cli/parse-opts args cli-opts)]
      (when errors
@@ -493,6 +483,12 @@
        (System/exit 1))
 
      (case cmd
+       ; For building a graalvm native image
+       "graalvm-profile"
+       (do (let [bridge (h/discover)]
+             (h/create-api-key! bridge)
+           (once! (config options))))
+
        "auth"
        (do (let [bridge (or (:address options)
                             (h/discover))]

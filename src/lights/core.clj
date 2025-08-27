@@ -427,10 +427,10 @@
   "Takes a config map and applies a new random palette, just once."
   [config]
   (if-not (try (apply-palette! config (rand-palette))
-           (catch java.io.EOFException e
-             (.printStackTrace e)
-             (Thread/sleep 1000)
-             true))
+               (catch java.io.EOFException e
+                 (.printStackTrace e)
+                 (Thread/sleep 1000)
+                 true))
     ; Didn't apply, try again
     (recur config)))
 

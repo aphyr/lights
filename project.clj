@@ -18,8 +18,6 @@
                  [http-kit "2.9.0-beta2"]
                  ]
   :repl-options {:init-ns lights.core}
-  ; Not sure why I was doing this
-  ;  :main ^:skip-aot lights.core
   :main lights.core
   :profiles {:uberjar {:aot :all
                        :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}})

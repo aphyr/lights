@@ -2,6 +2,7 @@
   "Talks to the Hue API."
   (:refer-clojure :exclude [get])
   (:require [clojure [pprint :refer [pprint]]]
+            [clojure.tools.logging :refer [info warn]]
             [clj-http.client :as http]
             [cheshire.core :as json]
             [lights.color :as c]
@@ -57,7 +58,7 @@
                     :insecure? true
                     :headers {:hue-application-key (:user config)}
                     :as :json
-                    :coerce :always
+                    :coerce :unexceptional
                     }
                    opts))
         body (:body r)]
@@ -116,10 +117,16 @@
 
 (defn lights!
   "Takes a map of light IDs to state update maps (see light!), and applies all
-  those settings."
+  those settings. This is slow, maybe someday I can try the scene API here."
   [config states]
-  (doseq [[id state] states]
-    (light! config id state)))
+  (let [t1 (System/nanoTime)]
+    (->> states
+         (mapv (fn [[id state]] (light! config id state))))
+    #_(info "Applied in" (-> (System/nanoTime)
+                           (- t1)
+                           (/ 1e6)
+                           float)
+          "ms")))
 
 (defn on?
   "Is a light object on?"

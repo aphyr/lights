@@ -6,15 +6,20 @@
   :repositories [["sonatype-snapshots"
                   {:url "https://oss.sonatype.org/content/repositories/snapshots"
                    :releases false}]]
-  :dependencies [[org.clojure/clojure "1.11.1"]
+  :dependencies [[org.clojure/clojure "1.12.0"]
                  [clj-http "3.12.3"]
                  [hickory "0.7.1"]
                  [cheshire "5.12.0"]
                  [org.clojure/tools.cli "1.0.219"]
                  [io.github.zeroone3010/yetanotherhueapi "3.0.0-rc"]
                  [slingshot "0.12.2"]
+                 [spootnik/unilog "0.7.32"]
+                 [org.clojure/tools.logging "1.3.0"]
+                 ;[org.slf4j/slf4j-simple "2.0.17"]
                  ]
-  :repl-options {:init-ns user}
-  :main ^:skip-aot lights.core
+  :repl-options {:init-ns lights.core}
+  ; Not sure why I was doing this
+  ;  :main ^:skip-aot lights.core
+  :main lights.core
   :profiles {:uberjar {:aot :all
                        :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}})

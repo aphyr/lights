@@ -1,4 +1,5 @@
 (ns lights.core
+  (:gen-class)
   (:require [lights [color :as c]
                     [hue :as h]]
             [clj-http.client :as http]
@@ -9,7 +10,9 @@
             [hickory [core :as hickory]
              [select :as hs]]
             [cheshire.core :as json]
-            [clojure.core.reducers :as r])
+            [clojure.core.reducers :as r]
+            [clojure.tools.logging :refer [info warn]]
+            [unilog.config :refer [start-logging!]])
   (:import (java.io PushbackReader)))
 
 (def config-file
@@ -449,6 +452,17 @@
 
    ["-u" "--user USERNAME" "Username for your Hue bridge."]
   ])
+
+(defn for-graalvm!
+  "Does stuff so GraalVM can pick up our dependencies"
+  []
+  ; It'll leave out java.lang.Math???
+  (Math/abs -1)
+  ; Logging setup
+  (start-logging! {:level "info", :console true})
+  (info "Lights (this message here for GraalVM native-image compilation"))
+
+(for-graalvm!)
 
 (defn -main
   "Main entry point"

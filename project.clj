@@ -15,7 +15,7 @@
                  [slingshot "0.12.2"]
                  [spootnik/unilog "0.7.32"]
                  [org.clojure/tools.logging "1.3.0"]
-                 ;[org.slf4j/slf4j-simple "2.0.17"]
+                 [http-kit "2.9.0-beta2"]
                  ]
   :repl-options {:init-ns lights.core}
   ; Not sure why I was doing this

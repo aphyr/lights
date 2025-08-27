@@ -12,6 +12,7 @@
             [cheshire.core :as json]
             [clojure.core.reducers :as r]
             [clojure.tools.logging :refer [info warn]]
+            [org.httpkit.server :as http-server]
             [unilog.config :refer [start-logging!]])
   (:import (java.io PushbackReader)))
 
@@ -446,6 +447,21 @@
            (Thread/sleep 1000)))
     (recur config)))
 
+(defn serve!
+  "Runs a little web server, so other things (e.g. home-assistant) can ask for
+  the lights to change. Right now this just responds to any GET request to /."
+  [config]
+  (http-server/run-server
+    (fn handle [req]
+      (do (once! config)
+          {:status 200
+           :headers {"Content-Type" "application/json"}
+           :body    "true"}))
+    {:port 8946})
+  (info "Listening on port 8946")
+  (info "Try: curl http://localhost:8946/")
+  (while true (Thread/sleep 10000)))
+
 (def cli-opts
   "tools.cli argument parsing spec"
   [
@@ -469,7 +485,7 @@
   ([]
    (println "Usage: lein run <cmd> <flags ...>")
    (println)
-   (println "Commands: auth, once, party")
+   (println "Commands: auth, once, party, serve")
    (println)
    (println "Flags:")
    (println (:summary (cli/parse-opts [] cli-opts))))
@@ -501,5 +517,7 @@
        (once! (config options))
 
        "party"
-       (let [config (config options)]
-         (party! config))))))
+       (party! (config options))
+
+       "serve"
+       (serve! (config options))))))

@@ -422,6 +422,17 @@
           (flush)
           true))))
 
+(defn once!
+  "Takes a config map and applies a new random palette, just once."
+  [config]
+  (if-not (try (apply-palette! config (rand-palette))
+           (catch java.io.EOFException e
+             (.printStackTrace e)
+             (Thread/sleep 1000)
+             true))
+    ; Didn't apply, try again
+    (recur config)))
+
 (defn party!
   "Takes a config map and continuously adjusts the lights to random palettes
   every interval seconds."
@@ -469,7 +480,7 @@
   ([]
    (println "Usage: lein run <cmd> <flags ...>")
    (println)
-   (println "Commands: auth, party")
+   (println "Commands: auth, once, party")
    (println)
    (println "Flags:")
    (println (:summary (cli/parse-opts [] cli-opts))))
@@ -489,6 +500,9 @@
                {:user    (h/create-api-key! bridge)
                 :address bridge}))
            (println "Auth complete. You may now party."))
+
+       "once"
+       (once! (config options))
 
        "party"
        (let [config (config options)]

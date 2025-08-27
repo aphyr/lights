@@ -30,6 +30,12 @@ in the current directory.
 
 ## Running
 
+To set the lights once, taking 2 seconds to transition:
+
+```
+lein run once -i 2
+```
+
 To have a party:
 
 ```
@@ -42,9 +48,11 @@ To change the lights every 5 seconds, run:
 lein run party -i 5
 ```
 
+To cap the maximum brightness at 60%, use `-b 50`.
+
 ## License
 
-Copyright © 2015-2024 Kyle Kingsbury
+Copyright © Kyle Kingsbury
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.

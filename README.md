@@ -57,7 +57,26 @@ lein run serve -i 1
 ```
 
 This listens on port 8946 for any request, which triggers the calculation of a
-new palette, which is applied in 1 second. Great for making a button that gives your house a random color scheme.
+new palette, which is applied in 1 second. Great for making a button that gives
+your house a random color scheme. If you need a little systemd file to run it,
+use `lein uberjar` to build a fat jar, drop your `.config.edn` somewhere
+useful, then make a daemon out with something like this in
+`/etc/systemd/system/lights.service`:
+
+```
+[Unit]
+Description=Daemon to control Hue lights
+After=network.target
+
+[Service]
+User=lights
+Group=lights
+WorkingDirectory=/home/lights
+ExecStart=/usr/bin/java -jar /home/lights/lights.jar serve -i 1
+
+[Install]
+WantedBy=multi-user.target
+```
 
 ## Notes
 

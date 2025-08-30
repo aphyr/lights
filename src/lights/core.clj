@@ -407,22 +407,35 @@
            merge-settings))))
 
 (defn apply-palette!
-  "Takes a config map, a palette, and applies it to lights over dt seconds.
-  Each cluster gets the same state plus a little noise. Avoids taking lights
-  through low-saturation colors by ensuring their hues are close-ish, or by
-  turning them off. Returns nil if it can't preserve aesthetic transitions."
-  [config palette]
-  (let [clusters (-> config h/lights lights->clusters)
-        settings (map (partial apply-palette-to-cluster config palette) clusters)]
-    (if (some nil? settings)
-      (do ;(println "Skipping palette; can't transform aesthetically")
-          (print ".")
-          (flush)
-          nil)
-      (do (h/lights! config (reduce merge {} settings))
-          (print "O")
-          (flush)
-          true))))
+  "Takes a config map, the current state of the lights, and a palette. Applies
+  palette to lights over dt seconds. Each cluster gets the same state plus a
+  little noise. Avoids taking lights through low-saturation colors by ensuring
+  their hues are close-ish, or by turning them off. Returns nil and does
+  nothing if it can't preserve aesthetic transitions."
+  ([config palette]
+   (apply-palette! config (h/lights config) palette))
+  ([config lights palette]
+   (let [clusters (lights->clusters lights)
+         settings (map (partial apply-palette-to-cluster config palette)
+                       clusters)]
+     (if (some nil? settings)
+       (do ;(println "Skipping palette; can't transform aesthetically")
+           (print ".")
+           (flush)
+           nil)
+       (do (h/lights! config (reduce merge {} settings))
+           (print "O")
+           (flush)
+           true)))))
+
+(defn apply-rand-palette!
+  "Applies a random palette to the current light state, retrying until it can
+  generate a palette which can be applied aesthetically."
+  [config]
+  (let [lights (h/lights config)]
+    (loop []
+      (or (apply-palette! config lights (rand-palette))
+          (recur)))))
 
 (defn init!
   "Runs one-time initialization--creating the global zone, for instance.
@@ -436,23 +449,17 @@
 (defn once!
   "Takes a config map and applies a new random palette, just once."
   [config]
-  (if-not (try (apply-palette! config (rand-palette))
-               (catch java.io.EOFException e
-                 (.printStackTrace e)
-                 true))
-    ; Didn't apply, try again
-    (recur config)))
+  (apply-rand-palette! config))
 
 (defn party!
   "Takes a config map and continuously adjusts the lights to random palettes
   every interval seconds."
   [config]
   (let [palette' (rand-palette)]
-    (try (when (apply-palette! config palette')
-           ; Applied
-           (Thread/sleep (* 1000 (:interval config))))
+    (try (apply-rand-palette! config)
+         (Thread/sleep (* 1000 (:interval config)))
          (catch java.io.EOFException e
-           (.printStackTrace e)
+           (warn e "EOF, retrying")
            (Thread/sleep 1000)))
     (recur config)))
 

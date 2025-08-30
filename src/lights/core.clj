@@ -11,7 +11,7 @@
              [select :as hs]]
             [cheshire.core :as json]
             [clojure.core.reducers :as r]
-            [clojure.tools.logging :refer [info warn]]
+            [clojure.tools.logging :refer [info warn error]]
             [org.httpkit.server :as http-server]
             [unilog.config :refer [start-logging!]])
   (:import (java.io PushbackReader)))
@@ -29,21 +29,22 @@
 
 (defn config
   "Takes CLI options. Loads config from file, merging in options map. Validates
-  config map, and returns it."
+  config map, and returns it. Config also includes a mutable :cache map, which
+  is used to speed up some Hue API queries."
   ([]
    (config {}))
   ([opts]
    (let [c (merge (load-config) opts)]
      (assert (string? (:user c)))
      (assert (string? (:address c)))
-     c)))
+     (assoc c :cache (atom {})))))
 
 (defn save-config!
   "Saves config map to file."
   [config]
   (with-open [w (io/writer config-file)]
     (binding [*out* w]
-      (pprint config))))
+      (pprint (dissoc config :cache)))))
 
 (defn map-kv
   "Takes a function (f [k v]) which returns [k v], and builds a new map by
@@ -423,6 +424,15 @@
           (flush)
           true))))
 
+(defn init!
+  "Runs one-time initialization--creating the global zone, for instance.
+  Returns config."
+  [config]
+  (h/ensure-global-zone! config)
+  (h/ensure-global-scene! config)
+  ;(pprint @(:cache config))
+  config)
+
 (defn once!
   "Takes a config map and applies a new random palette, just once."
   [config]
@@ -490,33 +500,37 @@
    (println (:summary (cli/parse-opts [] cli-opts))))
   ([cmd & args]
    (start-logging! {:level "info", :console true})
-   (let [{:keys [options arguments summary errors]}
-         (cli/parse-opts args cli-opts)]
-     (when errors
-       (doseq [e errors]
-         (println "Error: " e))
-       (System/exit 1))
+   (try
+     (let [{:keys [options arguments summary errors]}
+           (cli/parse-opts args cli-opts)]
+       (when errors
+         (doseq [e errors]
+           (println "Error: " e))
+         (System/exit 1))
 
-     (case cmd
-       ; For building a graalvm native image
-       "graalvm-profile"
-       (do (let [bridge (h/discover)]
-             (h/create-api-key! bridge)
-           (once! (config options))))
+       (case cmd
+         ; For building a graalvm native image
+         "graalvm-profile"
+         (do (let [bridge (h/discover)]
+               (h/create-api-key! bridge)
+               (once! (config options))))
 
-       "auth"
-       (do (let [bridge (or (:address options)
-                            (h/discover))]
-             (save-config!
-               {:user    (h/create-api-key! bridge)
-                :address bridge}))
-           (println "Auth complete. You may now party."))
+         "auth"
+         (do (let [bridge (or (:address options)
+                              (h/discover))]
+               (save-config!
+                 {:user    (h/create-api-key! bridge)
+                  :address bridge}))
+             (println "Auth complete. You may now party."))
 
-       "once"
-       (once! (config options))
+         "once"
+         (once! (init! (config options)))
 
-       "party"
-       (party! (config options))
+         "party"
+         (party! (init! (config options)))
 
-       "serve"
-       (serve! (config options))))))
+         "serve"
+         (serve! (init! (config options)))))
+     (catch Throwable t
+       (error t "Egads! A fatal error!")
+       (System/exit 1)))))

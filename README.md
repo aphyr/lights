@@ -50,6 +50,24 @@ lein run party -i 5
 
 To cap the maximum brightness at 60%, use `-b 50`.
 
+If you want to call this from home-assistant or some other automation, it includes the world's tiniest web server. Use:
+
+```
+lein run serve -i 1
+```
+
+This listens on port 8946 for any request, which triggers the calculation of a
+new palette, which is applied in 1 second. Great for making a button that gives your house a random color scheme.
+
+## Notes
+
+The Hue API, as far as I can tell, only lets you update one light at a time.
+This can mean any color scheme takes 5-10 seconds to apply. To work around
+this, we create a zone called `global` with every light, and a scene, also
+called `global`, which includes the state of every light. We update this scene
+and recall it in order to set the lights. This is a little impolite, in that it
+leaves global state sitting around on the Hue bridge, but the speedup is huge.
+
 ## License
 
 Copyright © Kyle Kingsbury

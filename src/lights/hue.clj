@@ -52,7 +52,7 @@
   "Makes an HTTP request to the API. Takes a config map, a path under /clip/,
   and a map to merge in to clj-http's options."
   [config path opts]
-  ;(pprint opts)
+  (info "req" path opts)
   (let [r (http/request
             (merge {:url (str "https://" (:address config) "/clip/" path)
                     :insecure? true
@@ -205,15 +205,24 @@
   the global zone ID in the config's cache, under :global-zone-id."
   [config]
   (let [light-ids (light-ids config)
-        id (-> (if-let [zone-id (:id (global-zone config))]
-                 ; Update
-                 (put! config (str "/v2/resource/zone/" zone-id) {}
-                       {:children (mapv (fn [id] {:rtype "light", :rid id})
-                                        light-ids)})
-                 ; Create
-                 (create-zone! config global-zone-name "home" light-ids))
-               first
-               :rid)]
+        zone      (global-zone config)
+        id (if-let [zone-id (:id zone)]
+             ; Update if necessary
+             (do (when (not= (set light-ids)
+                             (set (map :rid (:children zone))))
+                   (info "Updating global zone with new lights")
+                   (put! config (str "/v2/resource/zone/" zone-id) {}
+                         {:children (mapv (fn [id]
+                                            {:rtype "light", :rid id})
+                                          light-ids)}))
+                 (:id zone))
+
+             ; Create
+             (do (info "Creating global zone")
+                 (-> config
+                     (create-zone! global-zone-name "home" light-ids)
+                     first
+                     :rid)))]
     (swap! (:cache config) assoc :global-zone-id id)
     id))
 
@@ -266,13 +275,14 @@
   effect, caches that ID in :global-scene-id in the config's cache."
   [config]
   (let [id (or (:id (global-scene config))
-               (-> (create-scene! config global-scene-name
-                                  ; By default, every light off
-                                  (->> (light-ids config)
-                                       (map (fn [id] [id {:on {:on false}}]))
-                                       (into {})))
-                   first
-                   :rid))]
+               (do (info "Creating global scene")
+                   (-> (create-scene! config global-scene-name
+                                      ; By default, every light off
+                                      (->> (light-ids config)
+                                           (map (fn [id] [id {:on {:on false}}]))
+                                           (into {})))
+                       first
+                       :rid)))]
     (swap! (:cache config) assoc :global-scene-id id)
     id))
 

@@ -4,7 +4,7 @@ A Clojure program to set your Hue lights to various, randomly generated color
 palettes. Palettes shift continuously over time, trying to avoid becoming too
 white. Great for cocktail parties, or "I'm not sure what I want right now".
 
-[![A demonstration video of the lights program being triggered by presses of a wireless remote button](https://img.youtube.com/v1/SWW0u2QkY1s/0.jpg)](https://www.youtube.com/watch?v=SWW0u2QkY1s)
+[![A demonstration video of the lights program being triggered by presses of a wireless remote button](https://img.youtube.com/vi/SWW0u2QkY1s/0.jpg)](https://www.youtube.com/watch?v=SWW0u2QkY1s)
 
 You can group bulbs by naming them (e.g.) "Hall light 1", "Hall light 2", ....
 These lights will be identified as a cluster, and assigned similar colors.

@@ -382,19 +382,26 @@
   [config palette cluster]
   (let [cluster-name (light->cluster-name (first cluster))
         cluster-settings (-> config :clusters (get cluster-name))
+        cluster-brightness (:brightness cluster-settings 1)
         monochrome? (if (large-cluster? cluster)
                       ; For large clusters, we can do everything as one color,
                       ; or break it up.
                       (rand-nth [true false])
                       ; For small clusters, we always do monochrome.
                       true)
-        ; Large clusters can be overwhelmingly bright. We often like to disable
-        ; some (or even all) of the lights.
-        palette (if (large-cluster? cluster)
-                  (let [n (rand-int (inc (count palette)))
-                        [bright dim] (split-at n (shuffle palette))]
-                    (concat bright (map #(c/assoc-v % 0) dim)))
-                  palette)]
+        ; Dims a color so it's (on average) multiplied by the cluster
+        ; brightness factor.
+        scale-brightness (if (< cluster-brightness 1)
+                           (fn scale-brightness [color]
+                             (c/update-v color * (rand-exp cluster-brightness)))
+                           ; A little bit of a hack; we use an exponental
+                           ; distribution for scaling normally, which gives
+                           ; nice results aesthetically (lots of lights dim,
+                           ; occasionally a full-bright) but can turn a small
+                           ; cluster almost entirely off. We'll only apply this
+                           ; when users explicitly ask us to scale down a
+                           ; cluster.
+                           identity)]
     (if monochrome?
       ; Try to find a single color that works
       (loop [colors (shuffle palette)]
@@ -406,13 +413,15 @@
                     ; If we're dealing with a symmetric cluster, give them the
                     ; same color.
                     (symmetric-cluster? cluster)
-                    (map (partial apply-palette-to-light config palette color)
+                    (map (partial apply-palette-to-light config palette
+                                  (scale-brightness color))
                          cluster)
 
                     ; Otherwise, introduce some random noise
                     true
                     (map (partial apply-palette-to-light config palette)
-                         (map perturb-color (repeat color))
+                         (map (comp perturb-color scale-brightness)
+                              (repeat color))
                          cluster)))]
             (or settings
                 ; Didn't work, try another color

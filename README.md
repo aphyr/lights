@@ -80,6 +80,27 @@ ExecStart=/usr/bin/java -jar /home/lights/lights.jar serve -i 1
 WantedBy=multi-user.target
 ```
 
+## Clusters
+
+You can group your lights into *clusters* by naming them things like "Kitchen
+Left" and "Kitchen Right", or "Hall 1", "Hall 2", or "Downstairs Bath A",
+"Downstairs Bath B", etc. These clusters can have their brightness scaled, so
+if you have a fixture with six lights together, and a nearby one with just 1,
+the six-light cluster can be dimmer.
+
+To list clusters, run `lein run clusters`. To configure a cluster, add a `:clusters` key to `.config.edn`:
+
+```edn
+{:user "B9lv1moLAVZ8BcL6GM1Rdo5aEM6JDA3BvppNYWMM",
+ :address "10.0.0.165"
+ :clusters {"Globular" {:brightness 0.2}}}
+```
+
+Ths makes the sum of lights named (e.g.) "Globular 1", "Globular 2", ...
+generally one-fifth as bright as other lights.
+
+Clusters with "Left" and "Right" get identical colors applied to both lights.
+
 ## Notes
 
 The Hue API, as far as I can tell, only lets you update one light at a time.

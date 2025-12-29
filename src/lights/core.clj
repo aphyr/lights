@@ -62,17 +62,32 @@
   [x]
   (min 255 (max 0 x)))
 
+(defn light->cluster-name
+  "It's common to have multiple lights nearby, say in a single fixture. We call
+  this a 'cluster', and identify the bulbs by having a naming scheme like:
+
+    Kitchen Left, Kitchen Right
+    Kitchen A, Kitchen B, ...
+    Kitchen 1, Kitchen 2, ...
+
+  This function takes a light map, detects one of these special postfixes, and
+  returns the cluster name (e.g. 'Kitchen'). Any lights without a cluster
+  postfix has a cluster name equal to itself."
+  [light]
+  (let [name (:name (:metadata light))]
+    (assert (string? name)
+            (str "Expected a light, got " (pr-str light)))
+    (if-let [match (re-find #"^(.+?)\s+(\d+|[A-Z]|Left|Right)$" name)]
+      (match 1)
+      name)))
+
 (defn lights->clusters
   "Groups a sequence of lights together if they share a common prefix with only
   letters or numbers distinguishing them. Takes a lights map, returns a vector
   of vectors of lights in the same cluster."
   [lights]
   (->> lights
-       (group-by (fn [light]
-                   (let [name (:name (:metadata light))]
-                     (if-let [match (re-find #"^(.+?)\s+(\d+|[A-Z]|Left|Right)$" name)]
-                       (nth match 1)
-                       name))))
+       (group-by light->cluster-name)
        vals))
 
 (defn symmetric-cluster?
@@ -365,7 +380,9 @@
   "Applies a palette to a specific cluster, yielding a settings map for
   lights! Or nil if it can't find a way to do that aesthetically."
   [config palette cluster]
-  (let [monochrome? (if (large-cluster? cluster)
+  (let [cluster-name (light->cluster-name (first cluster))
+        cluster-settings (-> config :clusters (get cluster-name))
+        monochrome? (if (large-cluster? cluster)
                       ; For large clusters, we can do everything as one color,
                       ; or break it up.
                       (rand-nth [true false])
@@ -529,6 +546,16 @@
                  {:user    (h/create-api-key! bridge)
                   :address bridge}))
              (println "Auth complete. You may now party."))
+
+         "clusters"
+         (->> options
+              config
+              init!
+              h/lights
+              lights->clusters
+              (map (comp light->cluster-name first))
+              sort
+              (mapv println))
 
          "once"
          (once! (init! (config options)))
